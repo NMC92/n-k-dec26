@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- build fa33ef6847ef from 1340a6d @ 2026-10-12T23:36:37.401Z -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nelson &amp; Kirsi</title>
+<meta name="description" content="Counting down to 15:25 on 12 December 2026, when Kirsi's flight lands in Lisbon.">
+<!-- Add to Home Screen: opens fullscreen with no browser chrome and works
+     offline. Android needs the manifest plus a service worker; iOS also reads
+     apple-mobile-web-app-capable. The status bar style is translucent because
+     the sky behind it is dark and an opaque bar cuts a band across it. -->
+<meta name="theme-color" content="#2a2140">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nelson &amp; Kirsi">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Quicksand:wght@500;600;700&display=swap">
+<style>
+:root{
+  --bg0:#2a2140; --bg1:#4a3560; --bg2:#8d5f7a; --bg3:#e0a184;
+  --ink:#fff4ec; --soft:#e8c9d6;
+
+  /* The page's pink, and it is the artwork's pink.
+     Matched to the hearts drawn in the frames - rgb(250,154,155) - so the two
+     agree. The previous #ff9db6 was rgb(255,157,182): 27 more blue, which is why
+     it looked cooler and more violet beside the drawings. One token, so the
+     title, the travelling heart, the ground bar and the confetti cannot drift
+     apart from each other again. */
+  --pink:#fa9a9b;
+  --pink-haze:#fa9a9b55;   /* --pink at 33%, for the title glow */
+
+  /* The travelling heart and plane sit halfway between the two of them. In every
+     frame the pair is drawn together and centred, so halfway is simply the middle
+     - no need to track where either of them is. */
+  --mid:50;
+
+  /* Every drawing is made on the same ground line inside a square canvas, so each
+     one carries transparent padding below the feet - 6% of its own height. The
+     frames add that back and shift down by it, which is what puts the soles ON
+     the ground line instead of floating above it. */
+  --foot-pad:6%;
+
+  /* How much of the whole wait is gone, 0..1, published by JS. Drives the ground
+     bar, and stays linear because the bar is a statement about elapsed time and
+     should not flatter it. Which state the scene is in is carried by data-flight
+     and data-done on the stage rather than by more variables: one source per
+     fact. The picture itself is chosen from FRAMES in the script, by days left. */
+  --p:0;
+
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{height:100%}
+/* Fixed to the viewport rather than sized with dvh: this is a one-page scene
+   with no scrolling, and dvh is unreliable in embedded and headless contexts. */
+body{
+  position:fixed; inset:0; margin:0; overflow:hidden;
+  display:flex; flex-direction:column;
+  color:var(--ink);
+  font:600 16px/1.45 Quicksand,system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:linear-gradient(180deg,var(--bg0) 0%,var(--bg1) 38%,var(--bg2) 68%,var(--bg3) 100%);
+}
+/* Sky and glow live on pseudo-elements so the real elements stay readable to
+   assistive tech. */
+body::before,body::after{content:"";position:fixed;inset:0;pointer-events:none}
+body::before{
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 14%,#fff8,transparent),
+    radial-gradient(1.4px 1.4px at 27% 8%,#fff7,transparent),
+    radial-gradient(1.8px 1.8px at 44% 18%,#fff9,transparent),
+    radial-gradient(1.3px 1.3px at 61% 6%,#fff6,transparent),
+    radial-gradient(1.7px 1.7px at 76% 16%,#fff8,transparent),
+    radial-gradient(1.4px 1.4px at 88% 9%,#fff7,transparent),
+    radial-gradient(1.5px 1.5px at 8% 32%,#fff5,transparent),
+    radial-gradient(1.3px 1.3px at 93% 30%,#fff6,transparent);
+  animation:twinkle 5.5s ease-in-out infinite;
+}
+body::after{ /* low sun coming up over the horizon they are walking into */
+  background:radial-gradient(58vmin 46vmin at 50% 104%,#ffd9a8aa,transparent 70%);
+  mix-blend-mode:screen;
+}
+@keyframes twinkle{0%,100%{opacity:.45}50%{opacity:.9}}
+
+/* Today's date, above the names. Deliberately quiet: it is context, not the
+   point, and the countdown is what the page is for. So it takes the uppercase
+   letter-spaced treatment the clock labels use, which reads as a dateline rather
+   than as a headline, and it sits close to the title so the two form one block. */
+.today{
+  margin:0 0 clamp(5px,1.1vh,9px);
+  font-size:clamp(9.5px,2vw,11.5px);
+  letter-spacing:.16em; text-transform:uppercase;
+  color:var(--soft); opacity:.85;
+}
+
+/* ------------------------------------------------------------------ header */
+header{
+  position:relative; z-index:1; text-align:center;
+  padding:clamp(12px,3vh,26px) clamp(14px,4vw,28px) 0;
+}
+/* The heart is drawn, not typed.
+   "Nelson <heart> Kirsi" as one line of text never centred, because a glyph's
+   advance width has nothing to do with the shape inside it - U+2764 carries
+   several pixels of blank space on its right, so a perfectly centred row puts the
+   visible heart right of centre. Three attempts to correct that offset
+   arithmetically all failed: the font's metric disagrees with what the browser
+   paints, canvas rasterises this character differently from the DOM, and padding
+   the glyph moves the whole flex row because the row redistributes around it.
+
+   An SVG has no advance width and no side bearings, so its box IS its shape and
+   centring the box centres the mark. That part worked, and it exposed the real
+   problem, which was never the heart:
+
+     "Nelson" renders 60.6px wide. "Kirsi" renders 39.4px. A flex row centres the
+     TOTAL width, so a 21px difference puts the middle item 10.6px right of centre
+     - every time, whatever the heart is made of.
+
+   So the row is translated left by half that difference, MEASURED from the
+   rendered text rather than written down: the gap is a clamp that varies with the
+   viewport, and the names render in a web font whose metrics are not knowable in
+   advance. The correction is zero when the names happen to be equal, which is the
+   honest behaviour, and nothing is applied if the font API is missing.
+
+   Net effect: the heart sits on the centre line and the two names flank it
+   symmetrically, rather than the text block being centred with the heart pushed
+   off to one side. */
+h1{
+  font:700 clamp(19px,3.6vw,27px)/1.2 "Baloo 2",Quicksand,sans-serif;
+  margin:0; letter-spacing:.01em; text-shadow:0 2px 14px #0006;
+  display:flex; align-items:center; justify-content:center;
+  gap:clamp(6px,1.8vw,11px);
+}
+h1 .amp{
+  width:.82em; height:.82em; flex:none;
+  fill:var(--pink);
+  filter:drop-shadow(0 2px 10px var(--pink-haze));
+}
+
+.clock{
+  display:flex; gap:clamp(6px,1.6vw,13px); justify-content:center; flex-wrap:wrap;
+  margin-top:clamp(9px,2vh,16px);
+}
+.unit{
+  min-width:clamp(58px,12vw,78px); padding:clamp(6px,1.3vw,11px) clamp(7px,1.7vw,13px);
+  border-radius:15px; text-align:center;
+  background:#ffffff1f; border:1px solid #ffffff30;
+  box-shadow:0 8px 24px #0000002e, inset 0 1px 0 #ffffff30;
+  backdrop-filter:blur(7px);
+}
+.unit b{
+  display:block; font:700 clamp(21px,4.4vw,34px)/1 "Baloo 2",sans-serif;
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+}
+.unit span{font-size:clamp(8.5px,1.7vw,11px); letter-spacing:.15em; text-transform:uppercase; opacity:.72}
+
+.phase{
+  margin:clamp(8px,1.8vh,14px) 0 0; text-align:center;
+  font-size:clamp(12px,2.3vw,15px); color:var(--soft);
+}
+.phase b{color:var(--ink)}
+.phase .plane{display:inline-block; animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translate(0,0)}50%{transform:translate(3px,-3px)}}
+
+/* ------------------------------------------------------------------- stage
+   The stage takes whatever height is left over, so the chibis always sit above
+   the fold instead of hanging off the bottom of the page. */
+.stage{
+  position:relative; flex:1; min-height:0;
+  overflow:hidden;
+}
+/* The frame set: one drawing per stretch of the walk, each with both characters
+   already composed into it at the shared scale. So there is nothing to place -
+   each frame is one image above the ground line, and the sequence is chosen by
+   days remaining rather than animated.
+
+   The drawings are single images rather than separate figures because they have
+   to be: two independently generated chibis cannot be made to hold hands, so any
+   pose where they touch has to arrive as one picture.
+
+   WIDTH is the fixed dimension, not height. Their aspect ratios run from 0.46
+   (far apart - the full height of the canvas and narrow) to 0.90 (mid-sprint,
+   nearly square), because a wide composition runs out of canvas and has to be
+   drawn smaller. A fixed height would then render the wide ones at nearly double
+   the scale of the narrow ones, so the two of them would shrink the moment they
+   started running. Fixing the width and letting the height follow keeps the
+   FIGURES the same size in every frame, which is the property that actually
+   matters. The tallest frame still fits comfortably; the widest sets the width. */
+#frames{
+  --w:clamp(150px,46vw,470px);
+  position:absolute; left:50%; bottom:0; margin:0; display:block;
+  width:var(--w);
+  height:auto;
+  max-height:calc(92% * (1 + 0.06));
+  translate:-50% 6%;
+  filter:drop-shadow(0 12px 16px #00000045);
+  transition:opacity .7s ease;
+}
+.stage[data-flight="1"] #frames{
+  translate:-50% calc(6% - 12px);   /* the pair of them off the ground with her */
+}
+.stage[data-done="1"] #frames{opacity:0}
+
+/* The pair dissolve replaced by the one picture of them together. */
+.pair{
+  position:absolute; left:50%; bottom:0; margin:0;
+  --h:clamp(160px,44vh,430px);
+  height:calc(var(--h) * (1 + 0.06));
+  width:calc(var(--h) * 0.6684);   /* pair: 643 x 962 */
+  translate:-50% 6%;
+  opacity:0;
+  scale:.88;
+  filter:drop-shadow(0 12px 16px #00000045);
+  transition:opacity .9s ease, scale .9s cubic-bezier(.2,.9,.3,1.4);
+  pointer-events:none;
+}
+.stage[data-done="1"] .pair{opacity:1; scale:1}
+
+/* The ground they stand on doubles as the progress bar - the fill closes the
+   gap in step with the chibis, so there is no second decoration competing. */
+.ground{
+  position:absolute; left:0; right:0; bottom:0; height:2px;
+  background:#ffffff38; border-radius:2px;
+  transition:opacity .6s ease;
+}
+.ground::before{
+  content:""; position:absolute; inset:0 auto 0 0; width:calc(var(--p) * 100%);
+  background:linear-gradient(90deg,#ffd9a8,var(--pink)); border-radius:2px;
+  box-shadow:0 0 12px var(--pink-haze);
+}
+/* A tick per week, as a repeating gradient rather than seven elements. */
+.ground::after{
+  content:""; position:absolute; inset:0; opacity:.45;
+  background:repeating-linear-gradient(90deg,transparent 0 calc(100%/7 - 1px),
+    #ffffff55 calc(100%/7 - 1px) calc(100%/7));
+}
+.stage[data-done="1"] .ground{opacity:.35}
+
+/* What travels between them, on the ground line: a heart while she is away, a
+   plane once she flies. Both are text glyphs, so neither is an asset to keep in
+   sync with the art. At landing the marker simply fades out - the picture of the
+   two of them embracing is the payoff, and anything else on that line competes
+   with their feet and the progress bar for the same few pixels.
+
+   Sized in absolute units off --marker-h. Percentage sizing cannot be used: the
+   marker is absolutely positioned, so its width comes from its content, and a
+   child at height:100% resolves against its own natural size instead - which
+   silently blows the marker out to full stage width. */
+.marker{
+  --marker-h:clamp(16px,3vw,24px);
+  position:absolute; bottom:clamp(8px,2vh,18px);
+  left:calc(var(--mid) * 1%);
+  translate:-50% 0;
+  height:var(--marker-h); width:var(--marker-h);
+  display:grid; place-items:center;
+  transition:opacity .5s ease;
+}
+.marker > *{
+  grid-area:1/1;
+  width:100%; height:100%;
+  object-fit:contain;
+}
+.marker .h, .marker .f{
+  font-size:calc(var(--marker-h) * .96); line-height:1;
+}
+.marker .h{color:var(--pink); animation:beat 1.5s ease-in-out infinite}
+.marker .f{display:none}
+
+/* One state at a time. data-flight never applies once data-done does. */
+.stage[data-flight="1"] .marker .h{display:none}
+.stage[data-flight="1"] .marker .f{display:block}
+.stage[data-done="1"] .marker{opacity:0}
+@keyframes beat{0%,100%{transform:scale(1)}45%{transform:scale(1.22)}}
+
+/* ------------------------------------------------------------------ footer
+   A normal flex item, not an overlay: the stage then shrinks to whatever is
+   left, so the ground line and the chibis can never end up behind the text. */
+footer{
+  position:relative; z-index:1; flex:none;
+  text-align:center; padding:clamp(6px,1.4vh,12px) clamp(12px,4vw,24px) clamp(10px,2.2vh,18px);
+  font-size:clamp(10px,2vw,12px); color:#ffffff9e; pointer-events:none;
+}
+footer b{color:#ffffffd6}
+footer time{color:#fff; white-space:nowrap}
+
+/* One tiny confetti burst on day 0. 26 elements, no library. */
+.confetti{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:5}
+.confetti i{
+  position:absolute; top:-6vh; width:9px; height:14px; border-radius:2px;
+  animation:fall linear infinite;
+}
+@keyframes fall{
+  0%{transform:translateY(0) rotate(0);opacity:1}
+  100%{transform:translateY(118vh) rotate(720deg);opacity:.9}
+}
+body[data-reunited="0"] .confetti{display:none}
+
+/* Landscape phones are the tight case: the header alone can eat the viewport. */
+@media (max-height:560px){
+  #frames{--w:clamp(120px,54vw,300px)}
+  .pair{--h:clamp(110px,40vh,220px)}
+  h1{font-size:17px}
+  .unit b{font-size:20px}
+}
+@media (max-width:460px){
+  .clock{gap:5px}
+  .unit{min-width:54px; border-radius:12px}
+}
+/* Someone who asked for less motion gets a still picture and a number. */
+@media (prefers-reduced-motion:reduce){
+  *,body::before{animation:none!important}
+  #frames,.pair,.marker,.ground::before,.ground{transition:none!important}
+  .confetti{display:none!important}
+}
+</style>
+</head>
+<body data-reunited="0">
+
+<header>
+  <!-- No whitespace between the spans: in a flex row each text node becomes its
+       own item, so a stray space or newline here would add a fourth one and
+       reintroduce the asymmetry this markup exists to avoid. The heart is an
+       inline SVG rather than the character - see the note on h1 .amp. -->
+  <p class="today" id="today"></p>
+  <h1><span>Nelson</span><svg class="amp" viewBox="0 0 32 28.5" aria-hidden="true"><path d="M16 28.5C6.5 22 0 16.4 0 9.7 0 4.4 4.3 0 9.6 0 12.1 0 14.4 1 16 2.7 17.6 1 19.9 0 22.4 0 27.7 0 32 4.4 32 9.7c0 6.7-6.5 12.3-16 18.8Z"/></svg><span>Kirsi</span></h1>
+  <!-- aria-hidden: a clock that re-announces every second is unusable with a
+       screen reader. The date in the footer carries the meaning instead. -->
+  <div class="clock" id="clock" aria-hidden="true">
+    <div class="unit"><b id="d">--</b><span>days</span></div>
+    <div class="unit"><b id="h">--</b><span>hours</span></div>
+    <div class="unit"><b id="m">--</b><span>minutes</span></div>
+    <div class="unit"><b id="s">--</b><span>seconds</span></div>
+  </div>
+  <p class="phase" id="phase">loading&hellip;</p>
+</header>
+
+<main class="stage" id="stage" data-flight="0" data-done="0">
+  <!-- One drawing at a time, with both of them already in it. A single element
+       rather than two: any pose where they touch has to be one picture, so the
+       page never composes the figures itself - it only chooses the frame. -->
+  <img id="frames" src="sprites/f-apart.png"
+       alt="Nelson and Kirsi, still far apart and walking toward each other">
+  <img class="pair" id="pair" src="sprites/pair.png" alt="Nelson and Kirsi in each other's arms at last">
+  <div class="marker" aria-hidden="true">
+    <span class="h">&#10084;</span>
+    <span class="f">&#9992;</span>
+  </div>
+  <div class="ground" aria-hidden="true"></div>
+</main>
+
+<footer>
+  Helsinki <b>12:30</b> &rarr; Lisboa <b>15:25</b> &middot;
+  <time id="date" datetime="2026-12-12T15:25:00Z"></time>
+</footer>
+
+<div class="confetti" id="confetti" aria-hidden="true"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // The only numbers that matter, as absolute instants. Pinning the reunion to
+  // UTC rather than to a calendar date is what makes it land correctly no matter
+  // which timezone the page is opened in: Lisbon is UTC+0 in December, Helsinki
+  // UTC+2, so a 12:30 departure is 10:30Z and the hop is 5h55m.
+  const DEPARTURE = Date.parse("2026-12-12T10:30:00Z"); // 12:30 Helsinki
+  const REUNION   = Date.parse("2026-12-12T15:25:00Z"); // 15:25 Lisboa, landing
+
+  // How many days out the whole picture sequence begins. Longer than that and
+  // they simply wait in the first frame - the walk is compressed into this window
+  // because spread over the full 134-day wait, a day would be worth about three
+  // pixels and the page would look identical every time it was opened.
+  const WALK_DAYS = 45;
+
+  // The frame set, walked in order from the furthest out. Kept as a plain list of
+  // [days remaining, file] pairs rather than a find() over an object: the lookup
+  // below is a single loop, so there is nothing to get subtly wrong about which
+  // end the list is sorted from.
+  // Windows are 7 days wide through the run-up, then 6, on purpose - short enough
+  // that the picture visibly changes, long enough that each drawing gets looked
+  // at rather than flashed past. Day 0 is the reunion itself, which is the `pair`
+  // image, so the last entry covers days 1 to 11.
+  //
+  // The first number is the SMALLEST days-remaining this drawing is used for, so
+  // the list runs furthest-out first and the lookup takes the first entry the
+  // count has reached. It is a floor, not a ceiling: reading it as "38 days or
+  // fewer" while testing `>=` is exactly the off-by-one that made every drawing
+  // appear a day early.
+  const FRAMES = [
+    [45, "sprites/f-apart.png", "Nelson and Kirsi, still far apart and missing each other"],
+    [39, "sprites/f-walk.png",  "Nelson and Kirsi walking toward each other"],
+    [32, "sprites/f-reach.png", "Nelson and Kirsi reaching out for each other"],
+    [25, "sprites/f-ready.png", "Nelson waving, Kirsi getting ready to leave"],
+    [18, "sprites/f-run.png",   "Nelson and Kirsi running toward each other"],
+    [11, "sprites/f-miss.png",  "Their hands just missing, and Kirsi in a fluster"],
+  ];
+
+  // Used only for the ground bar's fill, which stays linear because it is a
+  // statement about elapsed time and should not flatter it.
+  // ponytail: fixed far edge of the bar. It fills from this date, so it starts
+  // part-full rather than empty - honest, but move it earlier for a fuller bar.
+  const START = Date.parse("2026-08-01T00:00:00Z");
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    d: $("d"), h: $("h"), m: $("m"), s: $("s"),
+    phase: $("phase"), stage: $("stage"), root: document.body,
+    date: $("date"), today: $("today"), confetti: $("confetti"),
+    frames: $("frames"),
+  };
+
+  // Today's date, above the names.
+  //
+  // "1456 h 46 min until you're together" says how long is left but never what
+  // day it is, and the only other date on the page is the one being counted to -
+  // so the two dates now frame the countdown: today above, the reunion below.
+  //
+  // pt-PT rather than the browser's own locale, so both dates on the page read in
+  // the same language. Formatted once per tick and written only when it changes,
+  // so this costs nothing and still rolls over correctly at midnight if the page
+  // is left open.
+  var lastToday = "";
+  function showToday(now) {
+    var text = new Date(now).toLocaleDateString("pt-PT", {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    });
+    if (text !== lastToday) {
+      lastToday = text;
+      el.today.textContent = text;
+    }
+  }
+
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const pad = (n) => (n < 10 ? "0" : "") + n;
+
+  // Which drawing is on screen, so the src is only reassigned when it changes.
+  let currentSrc = null;
+
+  // minutes remaining -> "1 h 05 min" / "4 min"
+  function human(mins) {
+    mins = Math.max(0, Math.round(mins));
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h ? h + " h " + pad(m) + " min" : m + " min";
+  }
+
+  function tick() {
+    const now = Date.now();
+    const left = REUNION - now;
+
+    showToday(now);
+
+    // ---- the four numbers
+    const secs = Math.floor(Math.max(0, left) / 1000);
+    el.d.textContent = Math.floor(secs / 86400);
+    el.h.textContent = pad(Math.floor(secs / 3600) % 24);
+    el.m.textContent = pad(Math.floor(secs / 60) % 60);
+    el.s.textContent = pad(secs % 60);
+
+    // ---- where they stand, and the sentence describing it
+    const p = clamp01((now - START) / (REUNION - START));
+    // The walk is compressed into its own window rather than the whole wait, so
+    // that a day's worth of it is actually visible. See WALK_DAYS.
+    const flying = now >= DEPARTURE && now < REUNION;
+    const done = now >= REUNION;
+
+    el.stage.style.setProperty("--p", p);
+    el.stage.dataset.flight = flying ? "1" : "0";
+    el.stage.dataset.done = done ? "1" : "0";
+    el.root.dataset.reunited = done ? "1" : "0";
+
+    if (done) {
+      el.phase.innerHTML = "<b>She has landed.</b> No more counting.";
+    } else if (flying) {
+      el.phase.innerHTML = '<span class="plane">&#9992;</span> In the air &mdash; ' +
+        human(left / 60000) + " until Lisbon";
+    } else {
+      el.phase.innerHTML = "<b>" + human(left / 60000) + "</b> until you're together";
+    }
+
+    // Swap in the drawing for how far out we are. Only on a change: setting the
+    // source every second would restart the decode and flicker the picture.
+    const daysLeft = left / 86400000;
+    let chosen = FRAMES[0];
+    for (const entry of FRAMES) {
+      // `>=`, not `<=`. The list runs from the widest window to the narrowest, so
+      // the first entry is the EARLIEST one - testing `<=` would match it for
+      // every date and the picture would never change.
+      if (daysLeft >= entry[0]) { chosen = entry; break; }
+    }
+    if (chosen[1] !== currentSrc) {
+      currentSrc = chosen[1];
+      el.frames.setAttribute("src", chosen[1]);
+      el.frames.setAttribute("alt", chosen[2]);
+    }
+  }
+
+  // 26 pieces, one per colour, laid out once. Cheaper and steadier than canvas.
+  // Read from the stylesheet rather than repeated as a literal, so the confetti
+  // is the same pink as everything else.
+  const PINK = getComputedStyle(document.documentElement).getPropertyValue("--pink").trim() || "#fa9a9b";
+  (function confetti() {
+    const colours = [PINK, "#ffd9a8", "#fff4ec", "#c9a7ff", "#8fe3d0", "#ffcf5c"];
+    let html = "";
+    for (let i = 0; i < 26; i++) {
+      html += '<i style="left:' + (i * 3.9 + (i % 5) * 1.7).toFixed(1) + "%;" +
+        "background:" + colours[i % colours.length] + ";" +
+        "animation-duration:" + (3.6 + (i % 7) * 0.55).toFixed(2) + "s;" +
+        "animation-delay:" + ((i % 11) * 0.42).toFixed(2) + "s;" +
+        "opacity:" + (0.65 + (i % 4) * 0.1) + '"></i>';
+    }
+    el.confetti.innerHTML = html;
+  })();
+
+  // Two ways to check a state without waiting until December:
+  //   ?p=0.98   jump to that fraction of the walk (0 = start, 1 = reunion)
+  //   ?t=<iso>  pin an exact instant, e.g. ?t=2026-12-12T14:00Z for mid-flight
+  // Everything else reads Date.now(), so neither mode needs its own code path.
+  const query = new URLSearchParams(location.search);
+  const at = query.get("t");
+  const fraction = query.get("p");
+  const previewing = Boolean(at) || fraction !== null;
+
+  // The footer date is the REUNION date - the one being counted to - so the two
+  // dates frame the countdown: today above the names, the 12th below.
+  //
+  // Formatted through toLocaleDateString rather than the Portuguese string it used
+  // to be, so both dates come from the same source and cannot disagree about the
+  // language or the weekday.
+  const REUNION_TEXT = new Date(REUNION).toLocaleDateString("pt-PT", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  });
+
+  if (previewing) {
+    let fixed = at ? Date.parse(at) : NaN;
+    if (!at) {
+      const p = Number(fraction);
+      fixed = Number.isFinite(p) ? START + clamp01(p) * (REUNION - START) : NaN;
+    }
+    if (Number.isFinite(fixed)) {
+      Date.now = function () { return fixed; };
+      el.date.textContent = REUNION_TEXT + " \u00b7 preview";
+    }
+  } else {
+    el.date.textContent = REUNION_TEXT;
+  }
+
+  tick();
+  if (!previewing) setInterval(tick, 1000);
+})();
+
+// Service worker, for Add to Home Screen and offline use.
+// Deliberately silent when it cannot register: opened straight off the disk as a
+// file:// URL there is no origin to register against, and that is a completely
+// normal way to use this page. It must not look broken because of it.
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+
+  // Reload once, by itself, when a new version takes over.
+  //
+  // The worker is CACHE-FIRST, which is what makes the app work offline and is
+  // also why an update needs a reload at all: the page currently on screen was
+  // served from the old cache, and its HTML is already in memory. skipWaiting and
+  // clients.claim make the new worker take charge immediately, but they cannot
+  // rewrite bytes the browser has already rendered. So one reload is required -
+  // that is the "open it twice" that has been annoying us.
+  //
+  // Three guards, each for a way this goes wrong:
+  //
+  //   1. Only when navigator.serviceWorker.controller already exists. Without a
+  //      controller this is a FIRST install, there is nothing stale to replace,
+  //      and reloading would fire for no reason on somebody's first visit.
+  //   2. Only once per page load. clients.claim() fires `activated` on the page
+  //      it takes over, so a naive reload-on-activate loops.
+  //   3. Not while the page is visible. Reloading under somebody's eyes is worse
+  //      than being one version behind for a few minutes, so if it is on screen
+  //      the reload waits until it is hidden - which on a phone is when they
+  //      leave the app, and they come back to the new version.
+  function reloadWhenUpdated(reg) {
+    if (!navigator.serviceWorker.controller) return;   // first install
+
+    var reloaded = false;
+    function reloadOnce() {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    }
+    function reloadWhenHidden() {
+      if (document.visibilityState === "hidden") reloadOnce();
+      else document.addEventListener("visibilitychange", function onHide() {
+        if (document.visibilityState !== "hidden") return;
+        document.removeEventListener("visibilitychange", onHide);
+        reloadOnce();
+      });
+    }
+
+    reg.addEventListener("updatefound", function () {
+      var incoming = reg.installing;
+      if (!incoming) return;
+      incoming.addEventListener("statechange", function () {
+        if (incoming.state === "activated") reloadWhenHidden();
+      });
+    });
+  }
+
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").then(reloadWhenUpdated).catch(function () {
+      /* offline install is optional: an unregistered worker is not a broken page */
+    });
+  });
+}
+
+// Two shifts, both measured, both onto the same line.
+//
+// Kirsi's reading was right: the heart should sit on the gap between Hours and
+// Minutes, and that gap is the line the eye reads as the middle of the page. Two
+// things have to be true at once, and each needs its own correction:
+//
+//   1. The GAP is not on the page centre. The four boxes are centred as a row, but
+//      they are unequal widths - measured 60, 60, 65 and 67px, because the digits
+//      differ and each box carries its own padding - so the gap between the middle
+//      two sits ~5.7px left of the row's centre, and the row's centre IS the page
+//      centre. The clock is shifted right to put the gap on 50%.
+//
+//   2. The HEART is not on the page centre either. "Nelson" renders 60.6px wide and
+//      "Kirsi" 39.4px, so a flex row centring their total width leaves the item
+//      between them 10.6px right of centre. The title is shifted left by half that
+//      difference.
+//
+// Measuring the gap against the flex ROW rather than the viewport was an earlier
+// bug worth recording: it shifted the gap a further 5.7px left instead of right,
+// doubling the error to 11.7px, because the row's centre was already the page
+// centre. The anchor has to be the thing being compared against.
+//
+// transform, NOT margin - a margin on a justify-content:center flex row removes
+// space and the row re-centres into what is left, so it moves about half as far as
+// asked. Measured: margin -10 moved the title 5px, transform -10 moved it 10.
+(function alignTitleAndClock() {
+  var h1 = document.querySelector("h1");
+  var heart = h1 && h1.querySelector(".amp");
+  var clock = document.querySelector(".clock");
+  var units = document.querySelectorAll(".unit");
+  var names = h1 ? h1.querySelectorAll("span") : [];
+
+  // The reset must be flushed before measuring: style changes are batched, so
+  // `transform = ""` followed straight away by getBoundingClientRect still returns
+  // the rect of the PREVIOUS transform. Reading offsetWidth forces layout.
+  function unshifted(el, measure) {
+    el.style.transform = "";
+    void el.offsetWidth;
+    return measure();
+  }
+
+  function applyOnce() {
+    var page = document.documentElement.clientWidth / 2;
+
+    if (clock && units.length === 4) {
+      var gap = unshifted(clock, function () {
+        return (units[1].getBoundingClientRect().right + units[2].getBoundingClientRect().left) / 2;
+      });
+      var moveClock = Math.round(page - gap);
+      clock.style.transform = moveClock ? "translateX(" + moveClock + "px)" : "";
+    }
+
+    if (h1 && heart && names.length >= 2) {
+      var moveTitle = unshifted(h1, function () {
+        var a = names[0].getBoundingClientRect().width;
+        var b = names[names.length - 1].getBoundingClientRect().width;
+        return Math.round((a - b) / 2);
+      });
+      h1.style.transform = moveTitle ? "translateX(" + -moveTitle + "px)" : "";
+    }
+  }
+
+  // Both are measured once more after the webfont arrives, because before that the
+  // names and the digits are being measured in a fallback face. Each is idempotent:
+  // it resets its own transform before measuring, so running twice is harmless -
+  // which matters, because it does run twice.
+  function apply() { applyOnce(); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(apply);
+  apply();
+})();
+</script>
+</body>
+</html>

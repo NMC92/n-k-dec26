@@ -1,0 +1,32 @@
+{
+  "name": "Nelson & Kirsi — countdown to Lisbon",
+  "short_name": "Nelson & Kirsi",
+  "description": "Counting down to 15:25 on 12 December 2026, when Kirsi's flight lands in Lisbon. Two chibis walk toward each other as the days run out.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a2140",
+  "theme_color": "#2a2140",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
